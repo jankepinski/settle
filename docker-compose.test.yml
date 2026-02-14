@@ -10,4 +10,4 @@ services:
       POSTGRES_PASSWORD: splitwise_test
       POSTGRES_DB: splitwise_test
     tmpfs:
-      - /var/lib/postgresql/data
+      - /var/lib/postgresql/data # RAM for speed

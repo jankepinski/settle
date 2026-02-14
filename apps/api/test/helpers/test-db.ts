@@ -1,65 +1,68 @@
 import { PrismaClient } from '../../src/generated/prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
+import pg from 'pg';
 import { execSync } from 'child_process';
 import path from 'path';
-import dotenv from 'dotenv';
 
-dotenv.config({ path: path.resolve(__dirname, '../../.env.test') });
+const TEST_DATABASE_URL =
+  process.env.DATABASE_URL ??
+  'postgresql://splitwise_test:splitwise_test@localhost:5433/splitwise_test?schema=public';
 
 let prisma: PrismaClient;
+let pool: pg.Pool;
 
 /**
- * Get or create a PrismaClient instance connected to the test database.
+ * Get a PrismaClient connected to the test database.
+ * Reuses the same client across the test suite.
  */
-export function getTestPrismaClient(): PrismaClient {
+export function getTestPrisma(): PrismaClient {
   if (!prisma) {
-    const adapter = new PrismaPg({
-      connectionString: process.env.DATABASE_URL,
-    });
+    const adapter = new PrismaPg({ connectionString: TEST_DATABASE_URL });
     prisma = new PrismaClient({ adapter });
   }
   return prisma;
 }
 
 /**
- * Run Prisma migrations against the test database.
- * Call this once before all tests in a suite.
+ * Get a raw pg Pool for operations that bypass Prisma (e.g. truncate).
  */
-export function setupTestDatabase(): void {
+function getPool(): pg.Pool {
+  if (!pool) {
+    pool = new pg.Pool({ connectionString: TEST_DATABASE_URL });
+  }
+  return pool;
+}
+
+/**
+ * Run Prisma migrations against the test database.
+ * Call this once in a global setup.
+ */
+export function migrateTestDb() {
+  const apiRoot = path.resolve(__dirname, '..', '..');
   execSync('npx prisma migrate deploy', {
-    cwd: path.resolve(__dirname, '../..'),
-    env: {
-      ...process.env,
-      DATABASE_URL: process.env.DATABASE_URL,
-    },
+    cwd: apiRoot,
+    env: { ...process.env, DATABASE_URL: TEST_DATABASE_URL },
     stdio: 'pipe',
   });
 }
 
 /**
- * Truncate all application tables in the test database.
- * Call this between tests for isolation.
+ * Truncate all tables (except _prisma_migrations) to reset state between tests.
+ * Uses raw pg to avoid Prisma's dynamic import issues in Jest.
  */
-export async function cleanDatabase(): Promise<void> {
-  const client = getTestPrismaClient();
-
-  const tablenames = await client.$queryRaw<
-    Array<{ tablename: string }>
-  >`SELECT tablename FROM pg_tables WHERE schemaname = 'public' AND tablename != '_prisma_migrations'`;
-
-  for (const { tablename } of tablenames) {
-    await client.$executeRawUnsafe(
-      `TRUNCATE TABLE "public"."${tablename}" CASCADE`,
-    );
-  }
+export async function truncateTables() {
+  const p = getPool();
+  await p.query('TRUNCATE TABLE "RefreshToken", "Account", "User" CASCADE');
 }
 
 /**
- * Disconnect the test PrismaClient.
- * Call this once after all tests in a suite.
+ * Disconnect the test PrismaClient and pool. Call in afterAll.
  */
-export async function closeDatabase(): Promise<void> {
+export async function disconnectTestDb() {
   if (prisma) {
     await prisma.$disconnect();
+  }
+  if (pool) {
+    await pool.end();
   }
 }
