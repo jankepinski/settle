@@ -1,0 +1,13 @@
+services:
+  postgres-test:
+    image: postgres:16-alpine
+    container_name: splitwise-db-test
+    restart: unless-stopped
+    ports:
+      - "5433:5432"
+    environment:
+      POSTGRES_USER: splitwise_test
+      POSTGRES_PASSWORD: splitwise_test
+      POSTGRES_DB: splitwise_test
+    tmpfs:
+      - /var/lib/postgresql/data
