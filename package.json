@@ -2,6 +2,7 @@
   "name": "splitwise",
   "version": "0.0.0",
   "private": true,
+  "packageManager": "pnpm@9.15.4",
   "scripts": {
     "dev": "pnpm -r --parallel dev",
     "build": "pnpm -r build",
