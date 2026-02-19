@@ -1,49 +1,57 @@
-/**
- * Test data factories for creating test entities.
- *
- * Each factory returns a plain object with sensible defaults.
- * Pass `overrides` to customize specific fields.
- *
- * Note: These types are intentionally loose (Record-based) because
- * Prisma models have not been defined yet. Once the schema has models,
- * replace these with proper Prisma-generated types, e.g.:
- *
- *   import { User, Group, Expense } from '../../src/generated/prisma/client';
- *   export const createTestUser = (overrides?: Partial<User>): User => ({ ... });
- */
-
-let userCounter = 0;
-
-export const createTestUser = (
-  overrides?: Record<string, unknown>,
-): Record<string, unknown> => {
-  userCounter++;
-  return {
-    email: `user${userCounter}@test.com`,
-    name: `Test User ${userCounter}`,
-    ...overrides,
-  };
-};
-
-export const createTestGroup = (
-  overrides?: Record<string, unknown>,
-): Record<string, unknown> => ({
-  name: 'Test Group',
-  ...overrides,
-});
-
-export const createTestExpense = (
-  overrides?: Record<string, unknown>,
-): Record<string, unknown> => ({
-  description: 'Lunch',
-  amount: 10000, // cents
-  currency: 'PLN',
-  ...overrides,
-});
+import * as bcrypt from 'bcrypt';
+import type { PrismaClient } from '../../src/generated/prisma/client';
 
 /**
- * Reset counters between test suites if needed.
+ * Factory functions for creating test data in the database.
+ *
+ * Each function takes the test PrismaClient and optional overrides,
+ * creates a record in the DB, and returns it.
  */
-export const resetFixtureCounters = (): void => {
-  userCounter = 0;
-};
+
+export async function createTestGuestUser(
+  prisma: PrismaClient,
+  overrides: { id?: string } = {},
+) {
+  return prisma.user.create({
+    data: {
+      isGuest: true,
+      ...overrides,
+    },
+  });
+}
+
+export async function createTestRegisteredUser(
+  prisma: PrismaClient,
+  overrides: {
+    email?: string;
+    password?: string;
+    displayName?: string;
+  } = {},
+) {
+  const email = overrides.email ?? 'test@example.com';
+  const passwordHash = await bcrypt.hash(overrides.password ?? 'password123', 10);
+
+  return prisma.user.create({
+    data: {
+      email,
+      passwordHash,
+      displayName: overrides.displayName ?? 'Test User',
+      isGuest: false,
+    },
+  });
+}
+
+export async function createTestRefreshToken(
+  prisma: PrismaClient,
+  userId: string,
+  tokenHash: string,
+  overrides: { expiresAt?: Date } = {},
+) {
+  return prisma.refreshToken.create({
+    data: {
+      tokenHash,
+      userId,
+      expiresAt: overrides.expiresAt ?? new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+    },
+  });
+}
