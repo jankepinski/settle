@@ -4,6 +4,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { generateInviteCode } from './invite-code.util';
 
 @Injectable()
 export class UsersService {
@@ -28,7 +29,10 @@ export class UsersService {
    * Create a new guest user — no email, no password, isGuest = true.
    */
   async createGuest() {
-    return this.prisma.user.create({ data: { isGuest: true } });
+    const inviteCode = await generateInviteCode(this.prisma);
+    return this.prisma.user.create({
+      data: { isGuest: true, inviteCode },
+    });
   }
 
   /**
@@ -84,11 +88,13 @@ export class UsersService {
       throw new ConflictException('Email already in use');
     }
 
+    const inviteCode = await generateInviteCode(this.prisma);
     return this.prisma.user.create({
       data: {
         email: data.email,
         passwordHash: data.passwordHash,
         displayName: data.displayName,
+        inviteCode,
         isGuest: false,
       },
     });

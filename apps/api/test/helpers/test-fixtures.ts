@@ -1,5 +1,6 @@
 import * as bcrypt from 'bcrypt';
 import type { PrismaClient } from '../../src/generated/prisma/client';
+import { randomCode } from '../../src/users/invite-code.util';
 
 /**
  * Factory functions for creating test data in the database.
@@ -10,11 +11,12 @@ import type { PrismaClient } from '../../src/generated/prisma/client';
 
 export async function createTestGuestUser(
   prisma: PrismaClient,
-  overrides: { id?: string } = {},
+  overrides: { id?: string; inviteCode?: string } = {},
 ) {
   return prisma.user.create({
     data: {
       isGuest: true,
+      inviteCode: overrides.inviteCode ?? randomCode(),
       ...overrides,
     },
   });
@@ -26,6 +28,7 @@ export async function createTestRegisteredUser(
     email?: string;
     password?: string;
     displayName?: string;
+    inviteCode?: string;
   } = {},
 ) {
   const email = overrides.email ?? 'test@example.com';
@@ -36,6 +39,7 @@ export async function createTestRegisteredUser(
       email,
       passwordHash,
       displayName: overrides.displayName ?? 'Test User',
+      inviteCode: overrides.inviteCode ?? randomCode(),
       isGuest: false,
     },
   });
