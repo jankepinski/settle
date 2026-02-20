@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { ConflictException, BadRequestException } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { PrismaService } from '../prisma/prisma.service';
+import * as inviteCodeUtil from './invite-code.util';
 
 describe('UsersService', () => {
   let service: UsersService;
@@ -30,6 +31,10 @@ describe('UsersService', () => {
     }).compile();
 
     service = module.get<UsersService>(UsersService);
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
   });
 
   describe('findById', () => {
@@ -77,15 +82,24 @@ describe('UsersService', () => {
   });
 
   describe('createGuest', () => {
-    it('should create user with isGuest=true and no email', async () => {
-      const guest = { id: 'guest-1', email: null, isGuest: true };
+    it('should call invite code generator and persist result', async () => {
+      const guest = {
+        id: 'guest-1',
+        email: null,
+        isGuest: true,
+        inviteCode: 'ABC123',
+      };
+      jest
+        .spyOn(inviteCodeUtil, 'generateInviteCode')
+        .mockResolvedValue('ABC123');
       prisma.user.create.mockResolvedValue(guest);
 
       const result = await service.createGuest();
 
+      expect(inviteCodeUtil.generateInviteCode).toHaveBeenCalledTimes(1);
       expect(result).toEqual(guest);
       expect(prisma.user.create).toHaveBeenCalledWith({
-        data: { isGuest: true },
+        data: { isGuest: true, inviteCode: 'ABC123' },
       });
     });
   });
@@ -152,13 +166,17 @@ describe('UsersService', () => {
   });
 
   describe('createRegistered', () => {
-    it('should create a non-guest user', async () => {
+    it('should call invite code generator and persist result', async () => {
       const user = {
         id: 'user-1',
         email: 'a@b.com',
         isGuest: false,
+        inviteCode: 'XYZ789',
       };
 
+      jest
+        .spyOn(inviteCodeUtil, 'generateInviteCode')
+        .mockResolvedValue('XYZ789');
       prisma.user.findUnique.mockResolvedValue(null); // email not taken
       prisma.user.create.mockResolvedValue(user);
 
@@ -167,12 +185,14 @@ describe('UsersService', () => {
         passwordHash: 'hashed',
       });
 
+      expect(inviteCodeUtil.generateInviteCode).toHaveBeenCalledTimes(1);
       expect(result).toEqual(user);
       expect(prisma.user.create).toHaveBeenCalledWith({
         data: {
           email: 'a@b.com',
           passwordHash: 'hashed',
           displayName: undefined,
+          inviteCode: 'XYZ789',
           isGuest: false,
         },
       });
