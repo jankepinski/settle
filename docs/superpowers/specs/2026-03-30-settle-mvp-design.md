@@ -190,7 +190,9 @@ Each Route Handler: parse request → extract current user from session → crea
 
 **Access control:** All endpoints require authentication (valid NextAuth session) except /api/auth/* (login, register). Group-scoped endpoints (details, members, expenses, balances) additionally require group membership — non-members receive 403. Endpoints that are authenticated but not group-scoped: GET /api/users (list all users for member selection) and POST /api/groups (any authenticated user can create a group).
 
-**API data conventions:** All monetary amounts are integer cents end-to-end (request and response). No decimal conversion at the API boundary. `UpdateExpenseCommand` via PUT is a full replacement — all fields must be provided (participantIds included). Omitting participantIds is invalid. API responses never include passwordHash — queries return DTOs.
+**API data conventions:** All monetary amounts are integer cents end-to-end (request and response). No decimal conversion at the API boundary. `UpdateExpenseCommand` via PUT is a full replacement — all fields must be provided (participantIds must be non-empty). Empty participantIds is invalid (400). API responses never include passwordHash — queries return DTOs.
+
+**Settlement endpoint isolation:** `PUT /api/expenses/[id]` and `DELETE /api/expenses/[id]` reject requests for expenses with `type: "settlement"` (400). Settlements are only deletable via `DELETE /api/settlements/[id]`. This enforces the "not editable" rule at the API boundary.
 
 **MVP omissions (explicit):** No delete-group, no password reset, no email verification, no pagination. Password hashing uses bcrypt.
 
