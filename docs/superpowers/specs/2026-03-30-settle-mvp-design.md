@@ -100,7 +100,7 @@ Simplified Splitwise clone. MVP scope: registration, login, groups, expenses spl
 | Type | Name | Input | Output |
 |---|---|---|---|
 | Command | CreateGroupCommand | name, memberIds (other users to add; creator always included automatically, duplicates ignored, empty list = group with only creator) | groupId |
-| Command | AddGroupMemberCommand | groupId, userId | void |
+| Command | AddGroupMemberCommand | groupId, userId (idempotent: if already a member, no-op 200) | void |
 | Command | RemoveGroupMemberCommand | groupId, userId | void |
 | Query | GetUserGroupsQuery | userId | Group[] |
 | Query | GetGroupDetailsQuery | groupId | Group + members |
@@ -115,7 +115,7 @@ Simplified Splitwise clone. MVP scope: registration, login, groups, expenses spl
 | Command | CreateSettlementCommand | groupId, paidById, recipientId, amount (positive integer cents; creates Expense with type="settlement" + single ExpenseSplit; paidById ≠ recipientId, both must be group members) | expenseId |
 | Command | DeleteSettlementCommand | expenseId (same as DeleteExpenseCommand but validates type="settlement") | void |
 | Query | GetGroupExpensesQuery | groupId | Expense[] with splits |
-| Query | GetGroupBalancesQuery | groupId | Array of { userId, balance } where balance = sum(paid) - sum(splits). Positive = others owe you, negative = you owe others. Integer cents. |
+| Query | GetGroupBalancesQuery | groupId | Array of { userId, balance } for every group member (including 0 balance if no activity). balance = sum(paid) - sum(splits). Positive = others owe you, negative = you owe others. Integer cents. |
 
 ### Pattern
 
@@ -193,6 +193,8 @@ Each Route Handler: parse request → extract current user from session → crea
 **API data conventions:** All monetary amounts are integer cents end-to-end (request and response). No decimal conversion at the API boundary. `UpdateExpenseCommand` via PUT is a full replacement — all fields must be provided (participantIds must be non-empty). Empty participantIds is invalid (400). API responses never include passwordHash — queries return DTOs.
 
 **Settlement endpoint isolation:** `PUT /api/expenses/[id]` and `DELETE /api/expenses/[id]` reject requests for expenses with `type: "settlement"` (400). Settlements are only deletable via `DELETE /api/settlements/[id]`. This enforces the "not editable" rule at the API boundary.
+
+**Non-group-scoped mutation routes** (`PUT /api/expenses/[id]`, `DELETE /api/expenses/[id]`, `DELETE /api/settlements/[id]`): the handler looks up the expense's groupId, then verifies the session user is a member of that group. Non-members receive 403. Same access control as group-scoped routes, just resolved via the expense rather than the URL.
 
 **MVP omissions (explicit):** No delete-group, no password reset, no email verification, no pagination. Password hashing uses bcrypt.
 
