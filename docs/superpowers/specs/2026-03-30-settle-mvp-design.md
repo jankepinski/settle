@@ -74,6 +74,8 @@ Simplified Splitwise clone. MVP scope: registration, login, groups, expenses spl
 
 **Amounts in cents (integer).** Avoids floating-point precision issues. 25.50 PLN = 2550. Frontend formats for display.
 
+**Who can record expenses/settlements.** Any group member can create an expense or settlement with any other group member as `paidById`. Splitwise-style: you can log that someone else paid. No restriction to "only the payer can record."
+
 **Payer vs participants.** `paidById` does not need to be in `participantIds`. The payer is tracked on the Expense; the split is only among participants. If the payer is also a participant, they appear in both. Example: A pays 90 for A, B, C → A's split is 30, balance = 90 paid - 30 owed = +60. Example: A pays 60 for B, C → A not in participants, balance = 60 paid - 0 owed = +60.
 
 **Equal split remainder handling.** When the amount doesn't divide evenly (e.g. 100 cents / 3 participants = 33 + 33 + 34), the remainder cents are distributed one-per-person to the first N participants (ordered by userId). This is deterministic and testable.
@@ -82,7 +84,7 @@ Simplified Splitwise clone. MVP scope: registration, login, groups, expenses spl
 
 **Expenses are editable.** Adding/removing participants or changing amounts triggers a full recalculation of splits for that expense.
 
-**Removing a group member.** A member cannot be removed from a group if they appear in any ExpenseSplit (as participant) or as paidBy on any expense in that group. The UI should show an error. To remove someone, first edit all their expenses to exclude them. The group creator can be removed under the same rules (no special status beyond being the initial creator).
+**Removing a group member.** A member cannot be removed from a group if they appear in any ExpenseSplit (as participant) or as paidBy on any expense in that group. The API returns 409 Conflict with a message explaining the block. To remove someone, first edit all their expenses to exclude them. The group creator can be removed under the same rules (no special status beyond being the initial creator).
 
 **Settlements as expenses.** A settlement (debt repayment) is modeled as an Expense with `type: "settlement"`. The payer is the person repaying debt, the single participant is the person receiving payment. This reuses the existing balance formula without changes: if A settles 50 with B, Expense(paidBy=A, amount=50, type="settlement") + ExpenseSplit(userId=B, amount=50). Effect: A's balance +50 (paid), B's balance -50 (split). Settlements have exactly one participant, and paidBy must differ from the participant. Settlements are not editable (delete and recreate instead) to keep things simple for MVP.
 
