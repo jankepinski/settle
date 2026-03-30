@@ -24,6 +24,10 @@ const groupRepo = new DrizzleGroupRepository(db);
 const expenseRepo = new DrizzleExpenseRepository(db);
 const splitRepo = new DrizzleExpenseSplitRepository(db);
 
+export async function findExpenseById(id: string) {
+  return expenseRepo.findById(id);
+}
+
 export const handlers = {
   register: new RegisterHandler(userRepo),
   getAllUsers: new GetAllUsersHandler(userRepo),
