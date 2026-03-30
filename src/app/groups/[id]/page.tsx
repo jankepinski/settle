@@ -7,15 +7,20 @@ import {
   ArrowLeftIcon,
   PlusIcon,
   UserPlusIcon,
-  TrashIcon,
-  PencilIcon,
+  ReceiptTextIcon,
+  HandCoinsIcon,
+  UsersIcon,
 } from "lucide-react";
 import { toast } from "sonner";
 import { formatCents } from "@/lib/format";
+import { AppShell } from "@/components/app-shell";
+import { UserAvatar } from "@/components/avatar";
+import { BalanceIndicator } from "@/components/balance-indicator";
+import { ExpenseItem } from "@/components/expense-item";
+import { MemberRow } from "@/components/member-row";
+import { EmptyState } from "@/components/empty-state";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Separator } from "@/components/ui/separator";
 import {
   Dialog,
   DialogContent,
@@ -70,7 +75,12 @@ type ExpenseRecord = {
 
 type ExpenseWithSplits = {
   expense: ExpenseRecord;
-  splits: Array<{ id: string; expenseId: string; userId: string; amount: number }>;
+  splits: Array<{
+    id: string;
+    expenseId: string;
+    userId: string;
+    amount: number;
+  }>;
 };
 
 type UserDTO = {
@@ -94,23 +104,21 @@ export default function GroupDetailPage() {
   const [balancesLoading, setBalancesLoading] = useState(true);
   const [expensesLoading, setExpensesLoading] = useState(true);
 
-  // Add/Edit Expense dialog
   const [expenseDialogOpen, setExpenseDialogOpen] = useState(false);
-  const [editingExpense, setEditingExpense] = useState<ExpenseWithSplits | null>(null);
+  const [editingExpense, setEditingExpense] =
+    useState<ExpenseWithSplits | null>(null);
   const [expensePayerId, setExpensePayerId] = useState("");
   const [expenseAmount, setExpenseAmount] = useState("");
   const [expenseDescription, setExpenseDescription] = useState("");
   const [expenseParticipants, setExpenseParticipants] = useState<string[]>([]);
   const [expenseSubmitting, setExpenseSubmitting] = useState(false);
 
-  // Settle Up dialog
   const [settleDialogOpen, setSettleDialogOpen] = useState(false);
   const [settlePayerId, setSettlePayerId] = useState("");
   const [settleRecipientId, setSettleRecipientId] = useState("");
   const [settleAmount, setSettleAmount] = useState("");
   const [settleSubmitting, setSettleSubmitting] = useState(false);
 
-  // Add Member dialog
   const [memberDialogOpen, setMemberDialogOpen] = useState(false);
   const [newMemberId, setNewMemberId] = useState("");
   const [memberSubmitting, setMemberSubmitting] = useState(false);
@@ -366,8 +374,9 @@ export default function GroupDetailPage() {
   }
 
   return (
-    <div className="min-h-svh bg-background">
-      <header className="border-b px-4 py-3 flex items-center gap-3">
+    <AppShell>
+      {/* Group header with back button */}
+      <div className="flex items-center gap-3 animate-fade-in">
         <Button
           variant="ghost"
           size="icon-sm"
@@ -376,202 +385,170 @@ export default function GroupDetailPage() {
           <ArrowLeftIcon />
           <span className="sr-only">Back to dashboard</span>
         </Button>
-        <h1 className="font-semibold text-lg">
-          {detailsLoading ? <Skeleton className="h-5 w-36 inline-block" /> : groupName}
-        </h1>
-      </header>
-
-      <main className="max-w-2xl mx-auto p-4 flex flex-col gap-8">
-        {/* ── Balances ── */}
-        <section className="flex flex-col gap-4">
-          <h2 className="text-base font-semibold">Balances</h2>
-          {balancesLoading ? (
-            <div className="flex flex-col gap-2">
-              {[1, 2, 3].map((i) => (
-                <Skeleton key={i} className="h-10 w-full rounded-lg" />
-              ))}
-            </div>
-          ) : balances.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No balances yet.</p>
+        <h1 className="font-heading text-2xl italic text-foreground">
+          {detailsLoading ? (
+            <Skeleton className="h-7 w-36 inline-block" />
           ) : (
-            <div className="flex flex-col gap-2">
-              {balances.map((b) => (
-                <div
-                  key={b.userId}
-                  className="flex items-center justify-between rounded-lg border px-3 py-2"
-                >
+            groupName
+          )}
+        </h1>
+      </div>
+
+      {/* Balances panel */}
+      <section className="flex flex-col gap-4 animate-fade-in-up stagger-1">
+        <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+          Balances
+        </h2>
+        {balancesLoading ? (
+          <div className="flex flex-col gap-2">
+            {[1, 2, 3].map((i) => (
+              <Skeleton key={i} className="h-12 w-full rounded-xl" />
+            ))}
+          </div>
+        ) : balances.length === 0 ? (
+          <p className="text-sm text-muted-foreground py-4">
+            No balances yet.
+          </p>
+        ) : (
+          <div className="grid gap-2">
+            {balances.map((b) => (
+              <div
+                key={b.userId}
+                className="flex items-center justify-between rounded-xl border border-border/60 px-4 py-3"
+              >
+                <div className="flex items-center gap-2.5">
+                  <UserAvatar name={getUserName(b.userId)} size="sm" />
                   <span className="text-sm font-medium">
                     {getUserName(b.userId)}
                   </span>
-                  <Badge
-                    variant={
-                      b.balance > 0
-                        ? "default"
-                        : b.balance < 0
-                          ? "destructive"
-                          : "secondary"
-                    }
-                  >
-                    {b.balance > 0 ? "+" : ""}
-                    {formatCents(b.balance)}
-                  </Badge>
                 </div>
-              ))}
-            </div>
-          )}
-        </section>
-
-        <Separator />
-
-        {/* ── Expenses & Settlements ── */}
-        <section className="flex flex-col gap-4">
-          <div className="flex items-center justify-between">
-            <h2 className="text-base font-semibold">Expenses</h2>
-            <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  setSettlePayerId("");
-                  setSettleRecipientId("");
-                  setSettleAmount("");
-                  setSettleDialogOpen(true);
-                }}
-              >
-                Settle Up
-              </Button>
-              <Button size="sm" onClick={openAddExpenseDialog}>
-                <PlusIcon data-icon="inline-start" />
-                Add Expense
-              </Button>
-            </div>
+                <BalanceIndicator
+                  balance={b.balance}
+                  className="animate-gentle-pulse"
+                />
+              </div>
+            ))}
           </div>
+        )}
+      </section>
 
-          {expensesLoading ? (
-            <div className="flex flex-col gap-2">
-              {[1, 2, 3].map((i) => (
-                <Skeleton key={i} className="h-14 w-full rounded-lg" />
-              ))}
-            </div>
-          ) : expenses.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              No expenses yet. Add one to get started.
-            </p>
-          ) : (
-            <div className="flex flex-col gap-2">
-              {expenses.map((item) => {
-                const isSettlement = item.expense.type === "settlement";
-                const recipientId = item.splits[0]?.userId ?? "";
-                return (
-                  <div
-                    key={item.expense.id}
-                    className="flex items-start justify-between rounded-lg border px-3 py-2 gap-2"
-                  >
-                    <div className="flex flex-col gap-0.5 min-w-0">
-                      {isSettlement ? (
-                        <span className="text-sm font-medium text-muted-foreground">
-                          Settlement
-                        </span>
-                      ) : (
-                        <span className="text-sm font-medium truncate">
-                          {item.expense.description || "Expense"}
-                        </span>
-                      )}
-                      <span className="text-xs text-muted-foreground">
-                        {isSettlement
-                          ? `${getUserName(item.expense.paidBy)} → ${getUserName(recipientId)} · ${formatCents(item.expense.amount)}`
-                          : `${formatCents(item.expense.amount)} · paid by ${getUserName(item.expense.paidBy)}`}
-                      </span>
-                      {!isSettlement && item.splits.length > 0 && (
-                        <span className="text-xs text-muted-foreground">
-                          Split: {item.splits.map((s) => getUserName(s.userId)).join(", ")}
-                        </span>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-1 shrink-0">
-                      {!isSettlement && (
-                        <Button
-                          variant="ghost"
-                          size="icon-sm"
-                          onClick={() => openEditExpenseDialog(item)}
-                        >
-                          <PencilIcon />
-                          <span className="sr-only">Edit expense</span>
-                        </Button>
-                      )}
-                      <Button
-                        variant="ghost"
-                        size="icon-sm"
-                        onClick={() =>
-                          isSettlement
-                            ? handleDeleteSettlement(item.expense.id)
-                            : handleDeleteExpense(item.expense.id)
-                        }
-                      >
-                        <TrashIcon />
-                        <span className="sr-only">Delete</span>
-                      </Button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </section>
-
-        <Separator />
-
-        {/* ── Members ── */}
-        <section className="flex flex-col gap-4">
-          <div className="flex items-center justify-between">
-            <h2 className="text-base font-semibold">Members</h2>
+      {/* Expenses & Settlements */}
+      <section className="flex flex-col gap-4 animate-fade-in-up stagger-2">
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+            Expenses
+          </h2>
+          <div className="flex items-center gap-2">
             <Button
               variant="outline"
               size="sm"
+              className="border-warm-amber/40 text-warm-amber-foreground hover:bg-warm-amber/10"
               onClick={() => {
-                setNewMemberId("");
-                setMemberDialogOpen(true);
+                setSettlePayerId("");
+                setSettleRecipientId("");
+                setSettleAmount("");
+                setSettleDialogOpen(true);
               }}
             >
-              <UserPlusIcon data-icon="inline-start" />
-              Add Member
+              <HandCoinsIcon data-icon="inline-start" />
+              Settle Up
+            </Button>
+            <Button size="sm" onClick={openAddExpenseDialog}>
+              <PlusIcon data-icon="inline-start" />
+              Add Expense
             </Button>
           </div>
+        </div>
 
-          {detailsLoading ? (
-            <div className="flex flex-col gap-2">
-              {[1, 2].map((i) => (
-                <Skeleton key={i} className="h-10 w-full rounded-lg" />
-              ))}
-            </div>
-          ) : members.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No members yet.</p>
-          ) : (
-            <div className="flex flex-col gap-2">
-              {members.map((m) => (
-                <div
-                  key={m.userId}
-                  className="flex items-center justify-between rounded-lg border px-3 py-2"
-                >
-                  <span className="text-sm font-medium">
-                    {getUserName(m.userId)}
-                  </span>
-                  <Button
-                    variant="ghost"
-                    size="icon-sm"
-                    onClick={() => handleRemoveMember(m.userId)}
-                  >
-                    <TrashIcon />
-                    <span className="sr-only">Remove member</span>
-                  </Button>
-                </div>
-              ))}
-            </div>
-          )}
-        </section>
-      </main>
+        {expensesLoading ? (
+          <div className="flex flex-col gap-2">
+            {[1, 2, 3].map((i) => (
+              <Skeleton key={i} className="h-16 w-full rounded-xl" />
+            ))}
+          </div>
+        ) : expenses.length === 0 ? (
+          <EmptyState
+            icon={ReceiptTextIcon}
+            title="No expenses yet"
+            description="Add an expense to start tracking who owes what."
+          />
+        ) : (
+          <div className="flex flex-col gap-2">
+            {expenses.map((item, index) => (
+              <div
+                key={item.expense.id}
+                className={`animate-fade-in-up stagger-${Math.min(index + 1, 8)}`}
+              >
+                <ExpenseItem
+                  expense={item.expense}
+                  splits={item.splits}
+                  getUserName={getUserName}
+                  onEdit={
+                    item.expense.type !== "settlement"
+                      ? () => openEditExpenseDialog(item)
+                      : undefined
+                  }
+                  onDelete={() =>
+                    item.expense.type === "settlement"
+                      ? handleDeleteSettlement(item.expense.id)
+                      : handleDeleteExpense(item.expense.id)
+                  }
+                />
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
 
-      {/* ── Add / Edit Expense Dialog ── */}
+      {/* Members */}
+      <section className="flex flex-col gap-4 animate-fade-in-up stagger-3">
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+            Members
+          </h2>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              setNewMemberId("");
+              setMemberDialogOpen(true);
+            }}
+          >
+            <UserPlusIcon data-icon="inline-start" />
+            Add Member
+          </Button>
+        </div>
+
+        {detailsLoading ? (
+          <div className="flex flex-col gap-2">
+            {[1, 2].map((i) => (
+              <Skeleton key={i} className="h-12 w-full rounded-xl" />
+            ))}
+          </div>
+        ) : members.length === 0 ? (
+          <EmptyState
+            icon={UsersIcon}
+            title="No members"
+            description="Add members to this group."
+          />
+        ) : (
+          <div className="flex flex-col gap-2">
+            {members.map((m, index) => (
+              <div
+                key={m.userId}
+                className={`animate-fade-in-up stagger-${Math.min(index + 1, 8)}`}
+              >
+                <MemberRow
+                  name={getUserName(m.userId)}
+                  onRemove={() => handleRemoveMember(m.userId)}
+                />
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
+      {/* Add / Edit Expense Dialog */}
       <Dialog
         open={expenseDialogOpen}
         onOpenChange={(open) => {
@@ -668,7 +645,7 @@ export default function GroupDetailPage() {
         </DialogContent>
       </Dialog>
 
-      {/* ── Settle Up Dialog ── */}
+      {/* Settle Up Dialog */}
       <Dialog open={settleDialogOpen} onOpenChange={setSettleDialogOpen}>
         <DialogContent>
           <form onSubmit={handleSettleSubmit} className="flex flex-col gap-4">
@@ -678,7 +655,10 @@ export default function GroupDetailPage() {
             <FieldGroup>
               <Field>
                 <FieldLabel>Payer</FieldLabel>
-                <Select value={settlePayerId} onValueChange={(v) => setSettlePayerId(v ?? "")}>
+                <Select
+                  value={settlePayerId}
+                  onValueChange={(v) => setSettlePayerId(v ?? "")}
+                >
                   <SelectTrigger className="w-full">
                     <SelectValue placeholder="Who is paying?" />
                   </SelectTrigger>
@@ -746,7 +726,7 @@ export default function GroupDetailPage() {
         </DialogContent>
       </Dialog>
 
-      {/* ── Add Member Dialog ── */}
+      {/* Add Member Dialog */}
       <Dialog
         open={memberDialogOpen}
         onOpenChange={(open) => {
@@ -762,7 +742,10 @@ export default function GroupDetailPage() {
             <FieldGroup>
               <Field>
                 <FieldLabel>User</FieldLabel>
-                <Select value={newMemberId} onValueChange={(v) => setNewMemberId(v ?? "")}>
+                <Select
+                  value={newMemberId}
+                  onValueChange={(v) => setNewMemberId(v ?? "")}
+                >
                   <SelectTrigger className="w-full">
                     <SelectValue placeholder="Select a user" />
                   </SelectTrigger>
@@ -787,7 +770,9 @@ export default function GroupDetailPage() {
             <DialogFooter>
               <Button
                 type="submit"
-                disabled={memberSubmitting || !newMemberId || newMemberId === "_no_users"}
+                disabled={
+                  memberSubmitting || !newMemberId || newMemberId === "_no_users"
+                }
               >
                 {memberSubmitting ? "Adding…" : "Add Member"}
               </Button>
@@ -795,6 +780,6 @@ export default function GroupDetailPage() {
           </form>
         </DialogContent>
       </Dialog>
-    </div>
+    </AppShell>
   );
 }
