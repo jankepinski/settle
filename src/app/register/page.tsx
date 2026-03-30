@@ -1,0 +1,139 @@
+"use client";
+
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import Link from "next/link";
+import { registerSchema } from "@/shared/validation/auth-schemas";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import {
+  Field,
+  FieldError,
+  FieldGroup,
+  FieldLabel,
+} from "@/components/ui/field";
+
+export default function RegisterPage() {
+  const router = useRouter();
+  const [email, setEmail] = useState("");
+  const [name, setName] = useState("");
+  const [password, setPassword] = useState("");
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [serverError, setServerError] = useState<string | null>(null);
+  const [pending, setPending] = useState(false);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setErrors({});
+    setServerError(null);
+
+    const result = registerSchema.safeParse({ email, name, password });
+    if (!result.success) {
+      const fieldErrors: Record<string, string> = {};
+      for (const [field, messages] of Object.entries(
+        result.error.flatten().fieldErrors
+      )) {
+        fieldErrors[field] = messages?.[0] ?? "Invalid value";
+      }
+      setErrors(fieldErrors);
+      return;
+    }
+
+    setPending(true);
+
+    const res = await fetch("/api/auth/register", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(result.data),
+    });
+
+    setPending(false);
+
+    if (res.ok) {
+      router.push("/login");
+    } else {
+      const data = await res.json().catch(() => ({}));
+      setServerError(
+        (data as { message?: string }).message ??
+          "Registration failed. Please try again."
+      );
+    }
+  }
+
+  return (
+    <div className="flex min-h-svh items-center justify-center bg-background p-4">
+      <Card className="w-full max-w-sm">
+        <CardHeader>
+          <CardTitle>Settle</CardTitle>
+          <CardDescription>Create a new account</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+            <FieldGroup>
+              <Field data-invalid={errors.email ? true : undefined}>
+                <FieldLabel htmlFor="email">Email</FieldLabel>
+                <Input
+                  id="email"
+                  type="email"
+                  placeholder="you@example.com"
+                  autoComplete="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  aria-invalid={errors.email ? true : undefined}
+                />
+                {errors.email && <FieldError>{errors.email}</FieldError>}
+              </Field>
+              <Field data-invalid={errors.name ? true : undefined}>
+                <FieldLabel htmlFor="name">Name</FieldLabel>
+                <Input
+                  id="name"
+                  type="text"
+                  placeholder="Your name"
+                  autoComplete="name"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  aria-invalid={errors.name ? true : undefined}
+                />
+                {errors.name && <FieldError>{errors.name}</FieldError>}
+              </Field>
+              <Field data-invalid={errors.password ? true : undefined}>
+                <FieldLabel htmlFor="password">Password</FieldLabel>
+                <Input
+                  id="password"
+                  type="password"
+                  placeholder="••••••••"
+                  autoComplete="new-password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  aria-invalid={errors.password ? true : undefined}
+                />
+                {errors.password && <FieldError>{errors.password}</FieldError>}
+              </Field>
+            </FieldGroup>
+            {serverError && <FieldError>{serverError}</FieldError>}
+            <Button type="submit" className="w-full" disabled={pending}>
+              {pending ? "Creating account…" : "Create Account"}
+            </Button>
+          </form>
+        </CardContent>
+        <CardFooter className="justify-center gap-1 text-sm text-muted-foreground">
+          Already have an account?
+          <Link
+            href="/login"
+            className="font-medium text-foreground hover:underline"
+          >
+            Sign in
+          </Link>
+        </CardFooter>
+      </Card>
+    </div>
+  );
+}
