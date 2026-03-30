@@ -13,6 +13,7 @@ Simplified Splitwise clone. MVP scope: registration, login, groups, expenses spl
 - **UI:** shadcn/ui + Tailwind CSS
 - **Architecture:** Clean Architecture, feature-sliced, CQRS
 - **DI:** Manual "poor man's DI" with composition root
+- **Validation:** Zod schemas shared between frontend forms and Route Handler request parsing
 - **API:** Route Handlers only (no Server Actions)
 
 ## Domain Model
@@ -197,6 +198,8 @@ Each Route Handler: parse request → extract current user from session → crea
 **Settlement endpoint isolation:** `PUT /api/expenses/[id]` and `DELETE /api/expenses/[id]` reject requests for expenses with `type: "settlement"` (400). Settlements are only deletable via `DELETE /api/settlements/[id]`. This enforces the "not editable" rule at the API boundary.
 
 **Non-group-scoped mutation routes** (`PUT /api/expenses/[id]`, `DELETE /api/expenses/[id]`, `DELETE /api/settlements/[id]`): the handler looks up the expense's groupId, then verifies the session user is a member of that group. Non-members receive 403. Same access control as group-scoped routes, just resolved via the expense rather than the URL.
+
+**Request validation:** Every Route Handler parses the request body/params through a Zod schema before creating a command/query. Invalid input returns 400 with Zod error details. Zod schemas are defined once per command and reused on the frontend for form validation (single source of truth).
 
 **MVP omissions (explicit):** No delete-group, no password reset, no email verification, no pagination. Password hashing uses bcrypt.
 
