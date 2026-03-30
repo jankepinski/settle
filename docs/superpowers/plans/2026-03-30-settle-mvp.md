@@ -155,7 +155,7 @@ Expected: Project scaffolded with `src/app/` structure.
 - [ ] **Step 2: Install backend dependencies**
 
 ```bash
-npm install drizzle-orm postgres bcryptjs uuid zod next-auth@beta
+npm install drizzle-orm postgres bcryptjs uuid zod next-auth@4
 npm install -D drizzle-kit @types/bcryptjs @types/uuid
 ```
 
@@ -1476,7 +1476,76 @@ export class GetGroupDetailsHandler {
 }
 ```
 
-- [ ] **Step 7: Run all unit tests**
+- [ ] **Step 7: Write query handler tests**
+
+Create `src/features/groups/application/__tests__/get-user-groups-query.unit.test.ts`:
+
+```typescript
+import { describe, it, expect, beforeEach } from "vitest";
+import { GetUserGroupsQuery, GetUserGroupsHandler } from "../get-user-groups-query";
+import { InMemoryGroupRepository } from "@/test-utils/in-memory-group-repository";
+
+describe("GetUserGroupsHandler", () => {
+  let groupRepo: InMemoryGroupRepository;
+  let handler: GetUserGroupsHandler;
+
+  beforeEach(() => {
+    groupRepo = new InMemoryGroupRepository();
+    handler = new GetUserGroupsHandler(groupRepo);
+  });
+
+  it("returns empty array when user has no groups", async () => {
+    const result = await handler.execute(new GetUserGroupsQuery("u1"));
+    expect(result).toEqual([]);
+  });
+
+  it("returns only groups the user is a member of", async () => {
+    await groupRepo.save({ id: "g1", name: "Trip", createdBy: "u1", createdAt: new Date() });
+    await groupRepo.save({ id: "g2", name: "Office", createdBy: "u2", createdAt: new Date() });
+    await groupRepo.addMember({ groupId: "g1", userId: "u1", joinedAt: new Date() });
+    await groupRepo.addMember({ groupId: "g2", userId: "u2", joinedAt: new Date() });
+
+    const result = await handler.execute(new GetUserGroupsQuery("u1"));
+    expect(result).toHaveLength(1);
+    expect(result[0].id).toBe("g1");
+  });
+});
+```
+
+Create `src/features/groups/application/__tests__/get-group-details-query.unit.test.ts`:
+
+```typescript
+import { describe, it, expect, beforeEach } from "vitest";
+import { GetGroupDetailsQuery, GetGroupDetailsHandler } from "../get-group-details-query";
+import { InMemoryGroupRepository } from "@/test-utils/in-memory-group-repository";
+
+describe("GetGroupDetailsHandler", () => {
+  let groupRepo: InMemoryGroupRepository;
+  let handler: GetGroupDetailsHandler;
+
+  beforeEach(async () => {
+    groupRepo = new InMemoryGroupRepository();
+    handler = new GetGroupDetailsHandler(groupRepo);
+    await groupRepo.save({ id: "g1", name: "Trip", createdBy: "u1", createdAt: new Date() });
+    await groupRepo.addMember({ groupId: "g1", userId: "u1", joinedAt: new Date() });
+    await groupRepo.addMember({ groupId: "g1", userId: "u2", joinedAt: new Date() });
+  });
+
+  it("returns group with members", async () => {
+    const result = await handler.execute(new GetGroupDetailsQuery("g1"));
+    expect(result.group.name).toBe("Trip");
+    expect(result.members).toHaveLength(2);
+  });
+
+  it("throws when group not found", async () => {
+    await expect(handler.execute(new GetGroupDetailsQuery("nonexistent"))).rejects.toThrow(
+      "Group not found",
+    );
+  });
+});
+```
+
+- [ ] **Step 8: Run all unit tests**
 
 ```bash
 npm run test:unit
@@ -1484,7 +1553,7 @@ npm run test:unit
 
 Expected: All tests PASS.
 
-- [ ] **Step 8: Commit**
+- [ ] **Step 9: Commit**
 
 ```bash
 git add -A
@@ -2633,11 +2702,221 @@ describe("DrizzleUserRepository", () => {
 });
 ```
 
-- [ ] **Step 4: Write group and expense repository integration tests**
+- [ ] **Step 4: Write group repository integration test**
 
-Create `src/features/groups/infrastructure/__tests__/drizzle-group-repository.integration.test.ts` and `src/features/expenses/infrastructure/__tests__/drizzle-expense-repository.integration.test.ts` following the same pattern: save entities, verify find/update/delete operations, test FK constraints, test cascade deletes.
+Create `src/features/groups/infrastructure/__tests__/drizzle-group-repository.integration.test.ts`:
 
-(Follow same structure as user repo test — beforeEach truncates, afterAll closes connection, each test exercises one repository method with assertions.)
+```typescript
+import { describe, it, expect, beforeEach, afterAll } from "vitest";
+import { DrizzleGroupRepository } from "../drizzle-group-repository";
+import { DrizzleUserRepository } from "@/features/auth/infrastructure/drizzle-user-repository";
+import { testDb, truncateAllTables, closeConnection } from "@/test-utils/integration-setup";
+import { User } from "@/features/auth/domain/user";
+import { Group, GroupMember } from "../../domain/group";
+
+describe("DrizzleGroupRepository", () => {
+  const groupRepo = new DrizzleGroupRepository(testDb);
+  const userRepo = new DrizzleUserRepository(testDb);
+
+  const user1: User = {
+    id: "550e8400-e29b-41d4-a716-446655440010",
+    email: "u1@test.com", name: "U1", passwordHash: "h", createdAt: new Date(),
+  };
+  const user2: User = {
+    id: "550e8400-e29b-41d4-a716-446655440011",
+    email: "u2@test.com", name: "U2", passwordHash: "h", createdAt: new Date(),
+  };
+
+  beforeEach(async () => {
+    await truncateAllTables();
+    await userRepo.save(user1);
+    await userRepo.save(user2);
+  });
+
+  afterAll(async () => {
+    await closeConnection();
+  });
+
+  it("saves and finds a group", async () => {
+    const group: Group = { id: "550e8400-e29b-41d4-a716-446655440020", name: "Trip", createdBy: user1.id, createdAt: new Date() };
+    await groupRepo.save(group);
+    const found = await groupRepo.findById(group.id);
+    expect(found).not.toBeNull();
+    expect(found!.name).toBe("Trip");
+  });
+
+  it("adds and finds members", async () => {
+    const group: Group = { id: "550e8400-e29b-41d4-a716-446655440021", name: "Trip", createdBy: user1.id, createdAt: new Date() };
+    await groupRepo.save(group);
+    await groupRepo.addMember({ groupId: group.id, userId: user1.id, joinedAt: new Date() });
+    await groupRepo.addMember({ groupId: group.id, userId: user2.id, joinedAt: new Date() });
+
+    const members = await groupRepo.findMembersByGroupId(group.id);
+    expect(members).toHaveLength(2);
+  });
+
+  it("addMember is idempotent (onConflictDoNothing)", async () => {
+    const group: Group = { id: "550e8400-e29b-41d4-a716-446655440022", name: "Trip", createdBy: user1.id, createdAt: new Date() };
+    await groupRepo.save(group);
+    await groupRepo.addMember({ groupId: group.id, userId: user1.id, joinedAt: new Date() });
+    await groupRepo.addMember({ groupId: group.id, userId: user1.id, joinedAt: new Date() });
+
+    const members = await groupRepo.findMembersByGroupId(group.id);
+    expect(members).toHaveLength(1);
+  });
+
+  it("isMember returns correct boolean", async () => {
+    const group: Group = { id: "550e8400-e29b-41d4-a716-446655440023", name: "Trip", createdBy: user1.id, createdAt: new Date() };
+    await groupRepo.save(group);
+    await groupRepo.addMember({ groupId: group.id, userId: user1.id, joinedAt: new Date() });
+
+    expect(await groupRepo.isMember(group.id, user1.id)).toBe(true);
+    expect(await groupRepo.isMember(group.id, user2.id)).toBe(false);
+  });
+
+  it("removes a member", async () => {
+    const group: Group = { id: "550e8400-e29b-41d4-a716-446655440024", name: "Trip", createdBy: user1.id, createdAt: new Date() };
+    await groupRepo.save(group);
+    await groupRepo.addMember({ groupId: group.id, userId: user1.id, joinedAt: new Date() });
+    await groupRepo.removeMember(group.id, user1.id);
+
+    const members = await groupRepo.findMembersByGroupId(group.id);
+    expect(members).toHaveLength(0);
+  });
+
+  it("findByUserId returns groups the user belongs to", async () => {
+    const g1: Group = { id: "550e8400-e29b-41d4-a716-446655440025", name: "Trip", createdBy: user1.id, createdAt: new Date() };
+    const g2: Group = { id: "550e8400-e29b-41d4-a716-446655440026", name: "Office", createdBy: user2.id, createdAt: new Date() };
+    await groupRepo.save(g1);
+    await groupRepo.save(g2);
+    await groupRepo.addMember({ groupId: g1.id, userId: user1.id, joinedAt: new Date() });
+    await groupRepo.addMember({ groupId: g2.id, userId: user2.id, joinedAt: new Date() });
+
+    const result = await groupRepo.findByUserId(user1.id);
+    expect(result).toHaveLength(1);
+    expect(result[0].id).toBe(g1.id);
+  });
+});
+```
+
+- [ ] **Step 5: Write expense and split repository integration tests**
+
+Create `src/features/expenses/infrastructure/__tests__/drizzle-expense-repository.integration.test.ts`:
+
+```typescript
+import { describe, it, expect, beforeEach, afterAll } from "vitest";
+import { DrizzleExpenseRepository } from "../drizzle-expense-repository";
+import { DrizzleExpenseSplitRepository } from "../drizzle-expense-split-repository";
+import { DrizzleUserRepository } from "@/features/auth/infrastructure/drizzle-user-repository";
+import { DrizzleGroupRepository } from "@/features/groups/infrastructure/drizzle-group-repository";
+import { testDb, truncateAllTables, closeConnection } from "@/test-utils/integration-setup";
+
+describe("DrizzleExpenseRepository + DrizzleExpenseSplitRepository", () => {
+  const userRepo = new DrizzleUserRepository(testDb);
+  const groupRepo = new DrizzleGroupRepository(testDb);
+  const expenseRepo = new DrizzleExpenseRepository(testDb);
+  const splitRepo = new DrizzleExpenseSplitRepository(testDb);
+
+  const userId = "550e8400-e29b-41d4-a716-446655440030";
+  const userId2 = "550e8400-e29b-41d4-a716-446655440031";
+  const groupId = "550e8400-e29b-41d4-a716-446655440040";
+  const expenseId = "550e8400-e29b-41d4-a716-446655440050";
+
+  beforeEach(async () => {
+    await truncateAllTables();
+    await userRepo.save({ id: userId, email: "u1@test.com", name: "U1", passwordHash: "h", createdAt: new Date() });
+    await userRepo.save({ id: userId2, email: "u2@test.com", name: "U2", passwordHash: "h", createdAt: new Date() });
+    await groupRepo.save({ id: groupId, name: "Trip", createdBy: userId, createdAt: new Date() });
+    await groupRepo.addMember({ groupId, userId, joinedAt: new Date() });
+    await groupRepo.addMember({ groupId, userId: userId2, joinedAt: new Date() });
+  });
+
+  afterAll(async () => {
+    await closeConnection();
+  });
+
+  it("saves and finds an expense", async () => {
+    await expenseRepo.save({
+      id: expenseId, groupId, paidBy: userId, amount: 1000,
+      description: "Dinner", type: "expense", createdAt: new Date(),
+    });
+    const found = await expenseRepo.findById(expenseId);
+    expect(found).not.toBeNull();
+    expect(found!.amount).toBe(1000);
+  });
+
+  it("saves and retrieves splits", async () => {
+    await expenseRepo.save({
+      id: expenseId, groupId, paidBy: userId, amount: 1000,
+      description: "Dinner", type: "expense", createdAt: new Date(),
+    });
+    await splitRepo.saveMany([
+      { id: "550e8400-e29b-41d4-a716-446655440060", expenseId, userId, amount: 500 },
+      { id: "550e8400-e29b-41d4-a716-446655440061", expenseId, userId: userId2, amount: 500 },
+    ]);
+
+    const splits = await splitRepo.findByExpenseId(expenseId);
+    expect(splits).toHaveLength(2);
+  });
+
+  it("cascade deletes splits when expense is deleted", async () => {
+    await expenseRepo.save({
+      id: expenseId, groupId, paidBy: userId, amount: 1000,
+      description: "Dinner", type: "expense", createdAt: new Date(),
+    });
+    await splitRepo.saveMany([
+      { id: "550e8400-e29b-41d4-a716-446655440062", expenseId, userId, amount: 500 },
+    ]);
+
+    await expenseRepo.delete(expenseId);
+    const splits = await splitRepo.findByExpenseId(expenseId);
+    expect(splits).toHaveLength(0);
+  });
+
+  it("findByGroupId returns all expenses in a group", async () => {
+    await expenseRepo.save({
+      id: expenseId, groupId, paidBy: userId, amount: 500,
+      description: "Lunch", type: "expense", createdAt: new Date(),
+    });
+    await expenseRepo.save({
+      id: "550e8400-e29b-41d4-a716-446655440051", groupId, paidBy: userId2, amount: 300,
+      description: "Coffee", type: "expense", createdAt: new Date(),
+    });
+
+    const expenses = await expenseRepo.findByGroupId(groupId);
+    expect(expenses).toHaveLength(2);
+  });
+
+  it("findByGroupId on splitRepo returns all splits in a group", async () => {
+    await expenseRepo.save({
+      id: expenseId, groupId, paidBy: userId, amount: 1000,
+      description: "Dinner", type: "expense", createdAt: new Date(),
+    });
+    await splitRepo.saveMany([
+      { id: "550e8400-e29b-41d4-a716-446655440063", expenseId, userId, amount: 500 },
+      { id: "550e8400-e29b-41d4-a716-446655440064", expenseId, userId: userId2, amount: 500 },
+    ]);
+
+    const splits = await splitRepo.findByGroupId(groupId);
+    expect(splits).toHaveLength(2);
+  });
+
+  it("updates an expense", async () => {
+    await expenseRepo.save({
+      id: expenseId, groupId, paidBy: userId, amount: 1000,
+      description: "Dinner", type: "expense", createdAt: new Date(),
+    });
+    await expenseRepo.update({
+      id: expenseId, groupId, paidBy: userId, amount: 1500,
+      description: "Updated Dinner", type: "expense", createdAt: new Date(),
+    });
+
+    const found = await expenseRepo.findById(expenseId);
+    expect(found!.amount).toBe(1500);
+    expect(found!.description).toBe("Updated Dinner");
+  });
+});
+```
 
 - [ ] **Step 5: Run integration tests**
 
