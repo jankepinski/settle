@@ -109,10 +109,10 @@ Simplified Splitwise clone. MVP scope: registration, login, groups, expenses spl
 
 | Type | Name | Input | Output |
 |---|---|---|---|
-| Command | CreateExpenseCommand | groupId, paidById, amount, description, participantIds (paidById and all participantIds must be current group members) | expenseId |
+| Command | CreateExpenseCommand | groupId, paidById, amount, description, participantIds (paidById and all participantIds must be current group members; participantIds must be non-empty; amount must be positive integer cents) | expenseId |
 | Command | UpdateExpenseCommand | expenseId, amount, description, paidById, participantIds (all required — full replacement) | void |
 | Command | DeleteExpenseCommand | expenseId (cascades: deletes all associated ExpenseSplit rows) | void |
-| Command | CreateSettlementCommand | groupId, paidById, recipientId, amount (creates Expense with type="settlement" + single ExpenseSplit; paidById ≠ recipientId, both must be group members) | expenseId |
+| Command | CreateSettlementCommand | groupId, paidById, recipientId, amount (positive integer cents; creates Expense with type="settlement" + single ExpenseSplit; paidById ≠ recipientId, both must be group members) | expenseId |
 | Command | DeleteSettlementCommand | expenseId (same as DeleteExpenseCommand but validates type="settlement") | void |
 | Query | GetGroupExpensesQuery | groupId | Expense[] with splits |
 | Query | GetGroupBalancesQuery | groupId | Array of { userId, balance } where balance = sum(paid) - sum(splits). Positive = others owe you, negative = you owe others. Integer cents. |
