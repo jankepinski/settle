@@ -6,7 +6,7 @@ Simplified Splitwise clone. MVP scope: registration, login, groups, expenses spl
 
 ## Tech Stack
 
-- **Framework:** Next.js (App Router, monorepo)
+- **Framework:** Next.js (App Router, single app)
 - **Auth:** NextAuth.js (Auth.js) with credentials provider
 - **ORM:** Drizzle ORM behind repository interfaces
 - **Database:** PostgreSQL 16 via Docker
@@ -73,9 +73,15 @@ Simplified Splitwise clone. MVP scope: registration, login, groups, expenses spl
 
 **Amounts in cents (integer).** Avoids floating-point precision issues. 25.50 PLN = 2550. Frontend formats for display.
 
+**Payer vs participants.** `paidById` does not need to be in `participantIds`. The payer is tracked on the Expense; the split is only among participants. If the payer is also a participant, they appear in both. Example: A pays 90 for A, B, C → A's split is 30, balance = 90 paid - 30 owed = +60. Example: A pays 60 for B, C → A not in participants, balance = 60 paid - 0 owed = +60.
+
+**Equal split remainder handling.** When the amount doesn't divide evenly (e.g. 100 cents / 3 participants = 33 + 33 + 34), the remainder cents are distributed one-per-person to the first N participants (ordered by userId). This is deterministic and testable.
+
 **Not all group members participate in every expense.** Participants are selected when creating an expense. Only participants get ExpenseSplit records. New group members are not retroactively added to existing expenses.
 
 **Expenses are editable.** Adding/removing participants or changing amounts triggers a full recalculation of splits for that expense.
+
+**Removing a group member.** A member cannot be removed from a group if they appear in any ExpenseSplit (as participant) or as paidBy on any expense in that group. The UI should show an error. To remove someone, first edit all their expenses to exclude them. The group creator can be removed under the same rules (no special status beyond being the initial creator).
 
 ## Application Layer (CQRS)
 
@@ -84,13 +90,13 @@ Simplified Splitwise clone. MVP scope: registration, login, groups, expenses spl
 | Type | Name | Input | Output |
 |---|---|---|---|
 | Command | RegisterCommand | email, name, password | userId |
-| Query | GetAllUsersQuery | — | User[] |
+| Query | GetAllUsersQuery | — | UserDTO[] (id, email, name — no passwordHash) |
 
 ### Groups Feature
 
 | Type | Name | Input | Output |
 |---|---|---|---|
-| Command | CreateGroupCommand | name, memberIds | groupId |
+| Command | CreateGroupCommand | name, memberIds (other users to add; creator always included automatically, duplicates ignored, empty list = group with only creator) | groupId |
 | Command | AddGroupMemberCommand | groupId, userId | void |
 | Command | RemoveGroupMemberCommand | groupId, userId | void |
 | Query | GetUserGroupsQuery | userId | Group[] |
@@ -100,11 +106,11 @@ Simplified Splitwise clone. MVP scope: registration, login, groups, expenses spl
 
 | Type | Name | Input | Output |
 |---|---|---|---|
-| Command | CreateExpenseCommand | groupId, paidById, amount, description, participantIds | expenseId |
-| Command | UpdateExpenseCommand | expenseId, amount?, description?, paidById?, participantIds? | void |
-| Command | DeleteExpenseCommand | expenseId | void |
+| Command | CreateExpenseCommand | groupId, paidById, amount, description, participantIds (paidById and all participantIds must be current group members) | expenseId |
+| Command | UpdateExpenseCommand | expenseId, amount, description, paidById, participantIds (all required — full replacement) | void |
+| Command | DeleteExpenseCommand | expenseId (cascades: deletes all associated ExpenseSplit rows) | void |
 | Query | GetGroupExpensesQuery | groupId | Expense[] with splits |
-| Query | GetGroupBalancesQuery | groupId | member balances |
+| Query | GetGroupBalancesQuery | groupId | Array of { userId, balance } where balance = sum(paid) - sum(splits). Positive = others owe you, negative = you owe others. Integer cents. |
 
 ### Pattern
 
@@ -173,7 +179,13 @@ NextAuth.js configured with credentials provider. Session-based auth. `app/api/a
 | DELETE | /api/expenses/[id] | DeleteExpenseCommand |
 | GET | /api/groups/[id]/balances | GetGroupBalancesQuery |
 
-Each Route Handler: parse request → create command/query → call handler → return response. Thin layer, zero business logic.
+Each Route Handler: parse request → extract current user from session → create command/query → call handler → return response. Thin layer, zero business logic. All user-scoped operations (e.g. GET /api/groups returning "my groups") derive the acting user from the NextAuth session.
+
+**Access control:** All endpoints require authentication (valid NextAuth session) except /api/auth/* (login, register). Group-scoped endpoints (details, members, expenses, balances) additionally require group membership — non-members receive 403. Endpoints that are authenticated but not group-scoped: GET /api/users (list all users for member selection) and POST /api/groups (any authenticated user can create a group).
+
+**API data conventions:** All monetary amounts are integer cents end-to-end (request and response). No decimal conversion at the API boundary. `UpdateExpenseCommand` via PUT is a full replacement — all fields must be provided (participantIds included). Omitting participantIds is invalid. API responses never include passwordHash — queries return DTOs.
+
+**MVP omissions (explicit):** No delete-group, no password reset, no email verification, no pagination. Password hashing uses bcrypt.
 
 ## Frontend
 
