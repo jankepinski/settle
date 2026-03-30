@@ -2,7 +2,7 @@
 
 ## Overview
 
-Simplified Splitwise clone. MVP scope: registration, login, groups, expenses split equally. All registered users are visible to each other (no friends system). Architecture designed for future extensibility (friends, direct expenses, custom split types, summary views).
+Simplified Splitwise clone. MVP scope: registration, login, groups, expenses split equally, settlements (debt repayment). All registered users are visible to each other (no friends system). Architecture designed for future extensibility (friends, direct expenses, custom split types, summary views).
 
 ## Tech Stack
 
@@ -51,6 +51,7 @@ Simplified Splitwise clone. MVP scope: registration, login, groups, expenses spl
 | paidBy | string | FK → User (who paid) |
 | amount | number | integer, in cents (grosz) |
 | description | string | |
+| type | string | "expense" or "settlement" |
 | createdAt | Date | |
 
 **ExpenseSplit**
@@ -83,6 +84,8 @@ Simplified Splitwise clone. MVP scope: registration, login, groups, expenses spl
 
 **Removing a group member.** A member cannot be removed from a group if they appear in any ExpenseSplit (as participant) or as paidBy on any expense in that group. The UI should show an error. To remove someone, first edit all their expenses to exclude them. The group creator can be removed under the same rules (no special status beyond being the initial creator).
 
+**Settlements as expenses.** A settlement (debt repayment) is modeled as an Expense with `type: "settlement"`. The payer is the person repaying debt, the single participant is the person receiving payment. This reuses the existing balance formula without changes: if A settles 50 with B, Expense(paidBy=A, amount=50, type="settlement") + ExpenseSplit(userId=B, amount=50). Effect: A's balance +50 (paid), B's balance -50 (split). Settlements have exactly one participant, and paidBy must differ from the participant. Settlements are not editable (delete and recreate instead) to keep things simple for MVP.
+
 ## Application Layer (CQRS)
 
 ### Auth Feature
@@ -109,6 +112,8 @@ Simplified Splitwise clone. MVP scope: registration, login, groups, expenses spl
 | Command | CreateExpenseCommand | groupId, paidById, amount, description, participantIds (paidById and all participantIds must be current group members) | expenseId |
 | Command | UpdateExpenseCommand | expenseId, amount, description, paidById, participantIds (all required — full replacement) | void |
 | Command | DeleteExpenseCommand | expenseId (cascades: deletes all associated ExpenseSplit rows) | void |
+| Command | CreateSettlementCommand | groupId, paidById, recipientId, amount (creates Expense with type="settlement" + single ExpenseSplit; paidById ≠ recipientId, both must be group members) | expenseId |
+| Command | DeleteSettlementCommand | expenseId (same as DeleteExpenseCommand but validates type="settlement") | void |
 | Query | GetGroupExpensesQuery | groupId | Expense[] with splits |
 | Query | GetGroupBalancesQuery | groupId | Array of { userId, balance } where balance = sum(paid) - sum(splits). Positive = others owe you, negative = you owe others. Integer cents. |
 
@@ -177,6 +182,8 @@ NextAuth.js configured with credentials provider. Session-based auth. `app/api/a
 | GET | /api/groups/[id]/expenses | GetGroupExpensesQuery |
 | PUT | /api/expenses/[id] | UpdateExpenseCommand |
 | DELETE | /api/expenses/[id] | DeleteExpenseCommand |
+| POST | /api/groups/[id]/settlements | CreateSettlementCommand |
+| DELETE | /api/settlements/[id] | DeleteSettlementCommand |
 | GET | /api/groups/[id]/balances | GetGroupBalancesQuery |
 
 Each Route Handler: parse request → extract current user from session → create command/query → call handler → return response. Thin layer, zero business logic. All user-scoped operations (e.g. GET /api/groups returning "my groups") derive the acting user from the NextAuth session.
@@ -230,6 +237,8 @@ settle/
         groups/[id]/expenses/route.ts
         groups/[id]/balances/route.ts
         expenses/[id]/route.ts
+        groups/[id]/settlements/route.ts
+        settlements/[id]/route.ts
     features/
       auth/
         domain/                             entities, IUserRepository
