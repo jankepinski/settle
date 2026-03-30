@@ -1,9 +1,13 @@
-import { NextAuthOptions } from "next-auth";
+import { NextAuthOptions, Session } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 import bcryptjs from "bcryptjs";
 import { db } from "../db/client";
 import { users } from "../db/schema";
 import { eq } from "drizzle-orm";
+
+interface SessionWithId extends Session {
+  user: Session["user"] & { id: string };
+}
 
 export const authOptions: NextAuthOptions = {
   providers: [
@@ -40,11 +44,12 @@ export const authOptions: NextAuthOptions = {
       }
       return token;
     },
-    async session({ session, token }) {
-      if (session.user) {
-        (session.user as any).id = token.id as string;
+    async session({ session, token }): Promise<SessionWithId> {
+      const extended = session as SessionWithId;
+      if (extended.user) {
+        extended.user.id = token.id as string;
       }
-      return session;
+      return extended;
     },
   },
   pages: {

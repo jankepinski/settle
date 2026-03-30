@@ -30,6 +30,6 @@ describe("GetAllUsersHandler", () => {
     const result = await handler.execute(new GetAllUsersQuery());
     expect(result).toHaveLength(1);
     expect(result[0]).toEqual({ id: "u1", email: "a@test.com", name: "Alice" });
-    expect((result[0] as any).passwordHash).toBeUndefined();
+    expect((result[0] as Record<string, unknown>).passwordHash).toBeUndefined();
   });
 });

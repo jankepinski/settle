@@ -6,7 +6,7 @@ export class GetAllUsersQuery {}
 export class GetAllUsersHandler {
   constructor(private readonly userRepo: IUserRepository) {}
 
-  async execute(_query: GetAllUsersQuery): Promise<UserDTO[]> {
+  async execute(_: GetAllUsersQuery): Promise<UserDTO[]> {
     const users = await this.userRepo.findAll();
     return users.map(toUserDTO);
   }
