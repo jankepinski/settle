@@ -263,6 +263,64 @@ settle/
     lib/                                    utils, helpers
 ```
 
+## Testing
+
+### Strategy
+
+Two test suites, independently runnable:
+
+- `npm run test:unit` — unit tests, no infrastructure needed
+- `npm run test:integration` — integration tests, requires running Docker (Postgres)
+- `npm run test` — runs both sequentially
+
+### Framework
+
+Vitest. Single config with workspace-style projects to separate unit and integration suites.
+
+### Unit Tests
+
+Test handlers with mocked repository interfaces. No database, no HTTP, pure logic.
+
+**What to cover:**
+- Equal split calculation (exact division, remainder distribution, single participant, payer in/out of participants)
+- Settlement creation (valid, paidBy == recipient rejected, non-member rejected)
+- Expense update (recalculates splits correctly)
+- Validation rules (empty participantIds, non-positive amount, non-member participant)
+- Balance computation logic (sum paid - sum splits across multiple expenses and settlements)
+- Group member removal (blocked when member has expenses, allowed when clean)
+- Registration (duplicate email rejected, password hashed)
+
+**Pattern:** Each handler gets a test file. Mock repositories via simple in-memory implementations of the domain interfaces.
+
+### Integration Tests
+
+Test repository implementations against real Postgres. Verify SQL, schema, constraints, cascades.
+
+**Database setup:**
+- Same Docker container as dev, separate database (`settle_test` alongside `settle_dev`)
+- Connection string in `.env.test`
+- Before suite: run Drizzle migrations on `settle_test`
+- Between tests: truncate all tables (fast, no schema rebuild)
+
+**What to cover:**
+- Repository CRUD operations (save, find, update, delete)
+- Foreign key constraints (e.g. expense references valid group and user)
+- Cascade deletes (deleting expense removes splits)
+- Unique constraints (duplicate email)
+- Complex queries (GetGroupBalancesQuery reading from real joined data)
+
+### File Conventions
+
+```
+src/features/expenses/application/__tests__/
+  create-expense-handler.unit.test.ts
+  update-expense-handler.unit.test.ts
+src/features/expenses/infrastructure/__tests__/
+  drizzle-expense-repository.integration.test.ts
+```
+
+Unit tests live next to handlers in `application/__tests__/`. Integration tests live next to implementations in `infrastructure/__tests__/`. Vitest config uses file naming convention (`.unit.test.ts` vs `.integration.test.ts`) to split suites.
+
 ## Future Extensibility
 
 The architecture is designed to accommodate these planned features without structural changes:
