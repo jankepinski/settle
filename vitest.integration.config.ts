@@ -10,6 +10,9 @@ export default defineConfig({
     pool: "forks",
     fileParallelism: false,
     passWithNoTests: true,
+    env: {
+      DATABASE_URL: "postgres://settle:settle@localhost:5433/settle_test",
+    },
   },
   resolve: {
     alias: {
