@@ -62,7 +62,7 @@ export default function RegisterPage() {
     } else {
       const data = await res.json().catch(() => ({}));
       setServerError(
-        (data as { message?: string }).message ??
+        (data as { error?: string }).error ??
           "Registration failed. Please try again."
       );
     }

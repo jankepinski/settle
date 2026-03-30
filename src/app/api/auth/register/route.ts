@@ -16,10 +16,10 @@ export async function POST(request: NextRequest) {
     );
     return NextResponse.json({ userId }, { status: 201 });
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : "Internal server error";
+    const message = error instanceof Error ? error.message : "";
     if (message === "Email already registered") {
       return NextResponse.json({ error: message }, { status: 409 });
     }
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

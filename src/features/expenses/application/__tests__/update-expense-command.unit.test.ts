@@ -56,4 +56,25 @@ describe("UpdateExpenseHandler", () => {
     const command = new UpdateExpenseCommand("e2", 200, "Updated", "u1", ["u2"]);
     await expect(handler.execute(command)).rejects.toThrow("Cannot update a settlement");
   });
+
+  it("rejects when expense not found", async () => {
+    const command = new UpdateExpenseCommand(
+      "nonexistent",
+      900,
+      "Dinner",
+      "u1",
+      ["u1", "u2", "u3"],
+    );
+    await expect(handler.execute(command)).rejects.toThrow(/not found/i);
+  });
+
+  it("rejects when new payer is not a group member", async () => {
+    const command = new UpdateExpenseCommand("e1", 900, "Dinner", "outsider", ["u1", "u2", "u3"]);
+    await expect(handler.execute(command)).rejects.toThrow(/not a group member/i);
+  });
+
+  it("rejects when new participant is not a group member", async () => {
+    const command = new UpdateExpenseCommand("e1", 900, "Dinner", "u1", ["u1", "outsider"]);
+    await expect(handler.execute(command)).rejects.toThrow(/not a group member/i);
+  });
 });

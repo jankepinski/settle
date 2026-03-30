@@ -17,6 +17,16 @@ export class RemoveGroupMemberHandler {
   ) {}
 
   async execute(command: RemoveGroupMemberCommand): Promise<void> {
+    const group = await this.groupRepo.findById(command.groupId);
+    if (!group) {
+      throw new Error("Group not found");
+    }
+
+    const isMember = await this.groupRepo.isMember(command.groupId, command.userId);
+    if (!isMember) {
+      throw new Error("User is not a member of this group");
+    }
+
     const expenses = await this.expenseRepo.findByGroupId(command.groupId);
     const isPayer = expenses.some((e) => e.paidBy === command.userId);
     if (isPayer) {

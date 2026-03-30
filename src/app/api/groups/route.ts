@@ -16,7 +16,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
 
-  const userId = (session.user as { id: string }).id;
+  const userId = session.user.id;
   const command = new CreateGroupCommand(parsed.data.name, userId, parsed.data.memberIds);
   const groupId = await handlers.createGroup.execute(command);
   return NextResponse.json({ groupId }, { status: 201 });
@@ -26,7 +26,7 @@ export async function GET() {
   const session = await getServerSession(authOptions);
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const userId = (session.user as { id: string }).id;
+  const userId = session.user.id;
   const groups = await handlers.getUserGroups.execute(new GetUserGroupsQuery(userId));
   return NextResponse.json(groups);
 }

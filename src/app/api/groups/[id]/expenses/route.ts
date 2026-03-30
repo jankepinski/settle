@@ -1,31 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/shared/infrastructure/auth/auth-options";
+import { getAuthenticatedUser, verifyGroupMembership } from "@/app/api/_lib/auth-utils";
 import { handlers } from "@/shared/infrastructure/di/container";
 import { CreateExpenseCommand } from "@/features/expenses/application/create-expense-command";
 import { GetGroupExpensesQuery } from "@/features/expenses/application/get-group-expenses-query";
-import { GetGroupDetailsQuery } from "@/features/groups/application/get-group-details-query";
 import { createExpenseSchema } from "@/shared/validation/expense-schemas";
 
 type Props = { params: Promise<{ id: string }> };
 
-async function verifyMembership(groupId: string, userId: string): Promise<boolean> {
-  try {
-    const details = await handlers.getGroupDetails.execute(new GetGroupDetailsQuery(groupId));
-    return details.members.some((m) => m.userId === userId);
-  } catch {
-    return false;
-  }
-}
-
 export async function POST(request: NextRequest, { params }: Props) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const user = await getAuthenticatedUser();
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { id: groupId } = await params;
-  const userId = (session.user as { id: string }).id;
 
-  if (!(await verifyMembership(groupId, userId))) {
+  if (!(await verifyGroupMembership(groupId, user.id))) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
@@ -43,20 +31,18 @@ export async function POST(request: NextRequest, { params }: Props) {
     );
     const expenseId = await handlers.createExpense.execute(command);
     return NextResponse.json({ expenseId }, { status: 201 });
-  } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : "Internal server error";
-    return NextResponse.json({ error: message }, { status: 400 });
+  } catch {
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
 
 export async function GET(_request: NextRequest, { params }: Props) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const user = await getAuthenticatedUser();
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { id: groupId } = await params;
-  const userId = (session.user as { id: string }).id;
 
-  if (!(await verifyMembership(groupId, userId))) {
+  if (!(await verifyGroupMembership(groupId, user.id))) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 

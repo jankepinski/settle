@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { useSession } from "next-auth/react";
 import { useParams, useRouter } from "next/navigation";
 import {
   ArrowLeftIcon,
@@ -79,6 +80,7 @@ type UserDTO = {
 };
 
 export default function GroupDetailPage() {
+  const { status } = useSession();
   const params = useParams();
   const router = useRouter();
   const groupId = params.id as string;
@@ -163,6 +165,12 @@ export default function GroupDetailPage() {
   }, []);
 
   useEffect(() => {
+    if (status === "unauthenticated") {
+      router.replace("/login");
+    }
+  }, [status, router]);
+
+  useEffect(() => {
     fetchDetails();
     fetchBalances();
     fetchExpenses();
@@ -211,10 +219,10 @@ export default function GroupDetailPage() {
     try {
       if (editingExpense) {
         const res = await fetch(`/api/expenses/${editingExpense.expense.id}`, {
-          method: "PATCH",
+          method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            paidBy: expensePayerId,
+            paidById: expensePayerId,
             amount: amountCents,
             description: expenseDescription,
             participantIds: expenseParticipants,
@@ -227,7 +235,7 @@ export default function GroupDetailPage() {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            paidBy: expensePayerId,
+            paidById: expensePayerId,
             amount: amountCents,
             description: expenseDescription,
             participantIds: expenseParticipants,
@@ -284,7 +292,7 @@ export default function GroupDetailPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          payerId: settlePayerId,
+          paidById: settlePayerId,
           recipientId: settleRecipientId,
           amount: amountCents,
         }),
@@ -348,6 +356,14 @@ export default function GroupDetailPage() {
   }
 
   const groupName = groupDetails?.group.name ?? "";
+
+  if (status === "loading" || status === "unauthenticated") {
+    return (
+      <div className="flex min-h-svh items-center justify-center">
+        <Skeleton className="h-8 w-40" />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-svh bg-background">
@@ -466,6 +482,11 @@ export default function GroupDetailPage() {
                           ? `${getUserName(item.expense.paidBy)} → ${getUserName(recipientId)} · ${formatCents(item.expense.amount)}`
                           : `${formatCents(item.expense.amount)} · paid by ${getUserName(item.expense.paidBy)}`}
                       </span>
+                      {!isSettlement && item.splits.length > 0 && (
+                        <span className="text-xs text-muted-foreground">
+                          Split: {item.splits.map((s) => getUserName(s.userId)).join(", ")}
+                        </span>
+                      )}
                     </div>
                     <div className="flex items-center gap-1 shrink-0">
                       {!isSettlement && (

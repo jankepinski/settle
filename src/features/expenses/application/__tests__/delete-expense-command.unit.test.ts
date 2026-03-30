@@ -38,4 +38,10 @@ describe("DeleteExpenseHandler", () => {
       "Use DeleteSettlementCommand",
     );
   });
+
+  it("rejects when expense not found", async () => {
+    await expect(handler.execute(new DeleteExpenseCommand("nonexistent"))).rejects.toThrow(
+      /not found/i,
+    );
+  });
 });

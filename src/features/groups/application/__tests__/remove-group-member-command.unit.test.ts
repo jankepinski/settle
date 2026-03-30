@@ -21,6 +21,34 @@ describe("RemoveGroupMemberHandler", () => {
     await groupRepo.addMember({ groupId: "g1", userId: "u2", joinedAt: new Date() });
   });
 
+  it("rejects when group does not exist", async () => {
+    await expect(
+      handler.execute(new RemoveGroupMemberCommand("g-nonexistent", "u1")),
+    ).rejects.toThrow("Group not found");
+  });
+
+  it("rejects when user is not a member", async () => {
+    const localGroupRepo = new InMemoryGroupRepository();
+    const localExpenseRepo = new InMemoryExpenseRepository();
+    const localSplitRepo = new InMemoryExpenseSplitRepository();
+    const localHandler = new RemoveGroupMemberHandler(
+      localGroupRepo,
+      localExpenseRepo,
+      localSplitRepo,
+    );
+    await localGroupRepo.save({
+      id: "g1",
+      name: "Trip",
+      createdBy: "u1",
+      createdAt: new Date(),
+    });
+    await localGroupRepo.addMember({ groupId: "g1", userId: "u1", joinedAt: new Date() });
+
+    await expect(
+      localHandler.execute(new RemoveGroupMemberCommand("g1", "u3")),
+    ).rejects.toThrow("not a member");
+  });
+
   it("removes a member with no expenses", async () => {
     await handler.execute(new RemoveGroupMemberCommand("g1", "u2"));
     const members = await groupRepo.findMembersByGroupId("g1");

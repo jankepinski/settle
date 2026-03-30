@@ -1,10 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/shared/infrastructure/auth/auth-options";
+import { getAuthenticatedUser, verifyGroupMembership } from "@/app/api/_lib/auth-utils";
 import { handlers, findExpenseById } from "@/shared/infrastructure/di/container";
 import { UpdateExpenseCommand } from "@/features/expenses/application/update-expense-command";
 import { DeleteExpenseCommand } from "@/features/expenses/application/delete-expense-command";
-import { GetGroupDetailsQuery } from "@/features/groups/application/get-group-details-query";
 import { updateExpenseSchema } from "@/shared/validation/expense-schemas";
 
 type Props = { params: Promise<{ id: string }> };
@@ -13,23 +11,17 @@ async function verifyExpenseMembership(expenseId: string, userId: string) {
   const expense = await findExpenseById(expenseId);
   if (!expense) return { expense: null, allowed: false };
 
-  try {
-    const details = await handlers.getGroupDetails.execute(new GetGroupDetailsQuery(expense.groupId));
-    const allowed = details.members.some((m) => m.userId === userId);
-    return { expense, allowed };
-  } catch {
-    return { expense, allowed: false };
-  }
+  const allowed = await verifyGroupMembership(expense.groupId, userId);
+  return { expense, allowed };
 }
 
 export async function PUT(request: NextRequest, { params }: Props) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const user = await getAuthenticatedUser();
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { id: expenseId } = await params;
-  const userId = (session.user as { id: string }).id;
 
-  const { expense, allowed } = await verifyExpenseMembership(expenseId, userId);
+  const { expense, allowed } = await verifyExpenseMembership(expenseId, user.id);
   if (!expense) return NextResponse.json({ error: "Not found" }, { status: 404 });
   if (!allowed) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
@@ -48,22 +40,21 @@ export async function PUT(request: NextRequest, { params }: Props) {
     await handlers.updateExpense.execute(command);
     return NextResponse.json({}, { status: 200 });
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : "Internal server error";
+    const message = error instanceof Error ? error.message : "";
     if (message === "Cannot update a settlement") {
       return NextResponse.json({ error: message }, { status: 400 });
     }
-    return NextResponse.json({ error: message }, { status: 400 });
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
 
 export async function DELETE(_request: NextRequest, { params }: Props) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const user = await getAuthenticatedUser();
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { id: expenseId } = await params;
-  const userId = (session.user as { id: string }).id;
 
-  const { expense, allowed } = await verifyExpenseMembership(expenseId, userId);
+  const { expense, allowed } = await verifyExpenseMembership(expenseId, user.id);
   if (!expense) return NextResponse.json({ error: "Not found" }, { status: 404 });
   if (!allowed) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
@@ -71,10 +62,10 @@ export async function DELETE(_request: NextRequest, { params }: Props) {
     await handlers.deleteExpense.execute(new DeleteExpenseCommand(expenseId));
     return NextResponse.json({}, { status: 200 });
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : "Internal server error";
+    const message = error instanceof Error ? error.message : "";
     if (message.includes("Use DeleteSettlementCommand")) {
       return NextResponse.json({ error: message }, { status: 400 });
     }
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

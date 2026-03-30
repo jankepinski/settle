@@ -44,13 +44,15 @@ export default function DashboardPage() {
 
   const [groups, setGroups] = useState<Group[]>([]);
   const [groupsLoading, setGroupsLoading] = useState(true);
+  const [memberCounts, setMemberCounts] = useState<Record<string, number>>({});
+  const [memberCountsLoading, setMemberCountsLoading] = useState(false);
   const [users, setUsers] = useState<UserDTO[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [groupName, setGroupName] = useState("");
   const [selectedMembers, setSelectedMembers] = useState<string[]>([]);
   const [creating, setCreating] = useState(false);
 
-  const currentUserId = (session?.user as { id?: string })?.id;
+  const currentUserId = session?.user?.id;
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -84,6 +86,47 @@ export default function DashboardPage() {
   useEffect(() => {
     if (status === "authenticated") fetchGroups();
   }, [status, fetchGroups]);
+
+  useEffect(() => {
+    if (groupsLoading) return;
+    if (groups.length === 0) {
+      setMemberCounts({});
+      setMemberCountsLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    setMemberCounts({});
+    setMemberCountsLoading(true);
+
+    (async () => {
+      const entries = await Promise.all(
+        groups.map(async (g) => {
+          try {
+            const res = await fetch(`/api/groups/${g.id}`);
+            if (!res.ok) return [g.id, null] as const;
+            const data: { members?: unknown[] } = await res.json();
+            return [g.id, data.members?.length ?? 0] as const;
+          } catch {
+            return [g.id, null] as const;
+          }
+        })
+      );
+
+      if (cancelled) return;
+
+      const next: Record<string, number> = {};
+      for (const [id, n] of entries) {
+        if (n !== null) next[id] = n;
+      }
+      setMemberCounts(next);
+      setMemberCountsLoading(false);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [groups, groupsLoading]);
 
   async function handleCreateGroup(e: React.FormEvent) {
     e.preventDefault();
@@ -242,7 +285,14 @@ export default function DashboardPage() {
                 <CardHeader>
                   <CardTitle className="text-base">{group.name}</CardTitle>
                   <CardDescription>
-                    Created{" "}
+                    {memberCountsLoading
+                      ? "… members"
+                      : group.id in memberCounts
+                        ? `${memberCounts[group.id]} ${
+                            memberCounts[group.id] === 1 ? "member" : "members"
+                          }`
+                        : "—"}{" "}
+                    · Created{" "}
                     {new Date(group.createdAt).toLocaleDateString("pl-PL")}
                   </CardDescription>
                 </CardHeader>

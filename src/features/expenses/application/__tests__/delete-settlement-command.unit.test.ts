@@ -36,4 +36,10 @@ describe("DeleteSettlementHandler", () => {
       "Not a settlement",
     );
   });
+
+  it("rejects when expense not found", async () => {
+    await expect(handler.execute(new DeleteSettlementCommand("missing-settlement-id"))).rejects.toThrow(
+      "not found",
+    );
+  });
 });

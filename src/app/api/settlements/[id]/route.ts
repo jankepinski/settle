@@ -12,7 +12,7 @@ export async function DELETE(_request: NextRequest, { params }: Props) {
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { id: expenseId } = await params;
-  const userId = (session.user as { id: string }).id;
+  const userId = session.user.id;
 
   const expense = await findExpenseById(expenseId);
   if (!expense) return NextResponse.json({ error: "Not found" }, { status: 404 });

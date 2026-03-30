@@ -1,4 +1,4 @@
-import { eq, and } from "drizzle-orm";
+import { eq, and, inArray } from "drizzle-orm";
 import { Database } from "@/shared/infrastructure/db/client";
 import { groups, groupMembers } from "@/shared/infrastructure/db/schema";
 import { Group, GroupMember } from "../domain/group";
@@ -21,8 +21,7 @@ export class DrizzleGroupRepository implements IGroupRepository {
     if (memberRows.length === 0) return [];
 
     const groupIds = memberRows.map((r) => r.groupId);
-    const result = await this.db.select().from(groups);
-    return result.filter((g) => groupIds.includes(g.id));
+    return this.db.select().from(groups).where(inArray(groups.id, groupIds));
   }
 
   async findMembersByGroupId(groupId: string): Promise<GroupMember[]> {

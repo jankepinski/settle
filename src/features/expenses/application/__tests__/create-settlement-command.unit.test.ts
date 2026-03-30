@@ -44,4 +44,9 @@ describe("CreateSettlementHandler", () => {
     const command = new CreateSettlementCommand("g1", "outsider", "u2", 500);
     await expect(handler.execute(command)).rejects.toThrow("not a group member");
   });
+
+  it("rejects when recipient is not a group member", async () => {
+    const command = new CreateSettlementCommand("g1", "u1", "outsider", 500);
+    await expect(handler.execute(command)).rejects.toThrow("not a group member");
+  });
 });
